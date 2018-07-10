@@ -41,6 +41,8 @@ tf.flags.DEFINE_string("word_counts_output_file", "/tmp/word_counts.txt",
 
 tf.flags.DEFINE_integer("num_threads", 8,
                         "Number of threads to preprocess the images.")
+tf.flags.DEFINE_integer("length_threshold", 64,
+                        "Maximum allowed sentence length before cropping.")
 
 FLAGS = tf.flags.FLAGS
 
@@ -254,7 +256,12 @@ def _process_sentence(sentence):
   """
   tokenized_sentence = [FLAGS.start_word]
   tokenized_sentence.extend(nltk.tokenize.word_tokenize(sentence.strip().lower()))
+
+  # Crop sentence if larger than threshold
+  if len(tokenized_sentence) > (FLAGS.length_threshold - 2):
+    tokenized_sentence = tokenized_sentence[:(FLAGS.length_threshold - 2)]
   tokenized_sentence.append(FLAGS.end_word)
+
   return tokenized_sentence
 
 
