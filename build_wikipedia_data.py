@@ -18,6 +18,8 @@ import nltk.tokenize
 import numpy as np
 from six.moves import xrange
 import tensorflow as tf
+import glove.utils
+
 
 tf.flags.DEFINE_string("text_dir", "/tmp/train2014/",
                        "Wikipedia Text JSON directory.")
@@ -33,11 +35,6 @@ tf.flags.DEFINE_string("end_word", "</S>",
                        "Special word added to the end of each sentence.")
 tf.flags.DEFINE_string("unknown_word", "<UNK>",
                        "Special word meaning 'unknown'.")
-tf.flags.DEFINE_integer("min_word_count", 10,
-                        "The minimum number of occurrences of each word in the "
-                        "training set for inclusion in the vocabulary.")
-tf.flags.DEFINE_string("word_counts_output_file", "/tmp/word_counts.txt",
-                       "Output vocabulary file of word counts.")
 
 tf.flags.DEFINE_integer("num_threads", 8,
                         "Number of threads to preprocess the images.")
@@ -48,26 +45,6 @@ FLAGS = tf.flags.FLAGS
 
 SentenceMetadata = namedtuple("SentenceMetadata",
                            ["article_id", "article_title", "sentence_id", "sentence_words"])
-
-
-class Vocabulary(object):
-  """Simple vocabulary wrapper."""
-
-  def __init__(self, vocab, unk_id):
-    """Initializes the vocabulary.
-    Args:
-      vocab: A dictionary of word to word_id.
-      unk_id: Id of the special 'unknown' word.
-    """
-    self._vocab = vocab
-    self._unk_id = unk_id
-
-  def word_to_id(self, word):
-    """Returns the integer id of a word string."""
-    if word in self._vocab:
-      return self._vocab[word]
-    else:
-      return self._unk_id
 
 
 def _int64_feature(value):
@@ -213,40 +190,6 @@ def _process_dataset(name, sentences, vocab, num_shards):
         (datetime.now(), len(sentences), name))
 
 
-def _create_vocab(sentences):
-  """Creates the vocabulary of word to word_id.
-  The vocabulary is saved to disk in a text file of word counts. The id of each
-  word in the file is its corresponding 0-based line number.
-  Args:
-    sentences: A list of lists of strings.
-  Returns:
-    A Vocabulary object.
-  """
-  print("Creating vocabulary.")
-  counter = Counter()
-  for s in sentences:
-    counter.update(s)
-  print("Total words:", len(counter))
-
-  # Filter uncommon words and sort by descending count.
-  word_counts = [x for x in counter.items() if x[1] >= FLAGS.min_word_count]
-  word_counts.sort(key=lambda x: x[1], reverse=True)
-  print("Words in vocabulary:", len(word_counts))
-
-  # Write out the word counts file.
-  with tf.gfile.FastGFile(FLAGS.word_counts_output_file, "w") as f:
-    f.write("\n".join(["%s %d" % (w, c) for w, c in word_counts]))
-  print("Wrote vocabulary file:", FLAGS.word_counts_output_file)
-
-  # Create the vocabulary dictionary.
-  reverse_vocab = [x[0] for x in word_counts]
-  unk_id = len(reverse_vocab)
-  vocab_dict = dict([(x, y) for (y, x) in enumerate(reverse_vocab)])
-  vocab = Vocabulary(vocab_dict, unk_id)
-
-  return vocab
-
-
 def _process_sentence(sentence):
   """Processes a sentence string into a list of tonenized words.
   Args:
@@ -334,7 +277,7 @@ def main(unused_argv):
   # Create vocabulary from the training captions.
   train_words = [sentence.sentence_words for sentence in wikipedia_train_dataset]
   train_words += [sentence.article_title for sentence in wikipedia_train_dataset]
-  vocab = _create_vocab(train_words)
+  vocab = glove.utils.load()[0]
 
   _process_dataset("train", wikipedia_train_dataset, vocab, FLAGS.train_shards)
 
